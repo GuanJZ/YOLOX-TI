@@ -76,6 +76,20 @@ def make_parser():
         help="Using TensorRT model for testing.",
     )
     parser.add_argument(
+        "--onnx",
+        dest="onnx",
+        default=False,
+        action="store_true",
+        help="Using TensorRT model for testing.",
+    )
+    parser.add_argument(
+        "--onnx-nms",
+        dest="onnx_nms",
+        default=False,
+        action="store_true",
+        help="Using TensorRT model for testing.",
+    )
+    parser.add_argument(
         "--test",
         dest="test",
         default=False,
@@ -133,7 +147,7 @@ def main(exp, args, num_gpu):
 
     model = exp.get_model()
     logger.info("Model Summary: {}".format(get_model_info(model, exp.test_size)))
-    logger.info("Model Structure:\n{}".format(str(model)))
+    # logger.info("Model Structure:\n{}".format(str(model)))
 
     evaluator = exp.get_evaluator(args.batch_size, is_distributed, args.test)
 
@@ -141,7 +155,7 @@ def main(exp, args, num_gpu):
     model.cuda(rank)
     model.eval()
 
-    if not args.speed and not args.trt:
+    if not args.speed and not args.trt and not args.onnx and not args.onnx_nms:
         if args.ckpt is None:
             ckpt_file = os.path.join(file_name, "best_ckpt.pth")
         else:
@@ -169,13 +183,39 @@ def main(exp, args, num_gpu):
         ), "TensorRT model is not found!\n Run tools/trt.py first!"
         model.head.decode_in_inference = False
         decoder = model.head.decode_outputs
+        onnx_file = None
+        onnx_nms_file = None
+    elif args.onnx:
+        assert (
+            not args.fuse and not is_distributed and args.batch_size == 1
+        ), "ONNX model is not support model fusing and distributed inferencing!"
+        onnx_file = os.path.join(file_name, "yolox_s_ti_lite_nonms.onnx")
+        assert os.path.exists(
+            onnx_file
+        ), "ONNX model is not found!\n Run tools/trt.py first!"
+        trt_file = None
+        onnx_nms_file = None
+        decoder = None
+    elif args.onnx_nms:
+        assert (
+            not args.fuse and not is_distributed and args.batch_size == 1
+        ), "ONNX model with postprocess is not support model fusing and distributed inferencing!"
+        onnx_nms_file = os.path.join(file_name, "yolox_s_ti_lite.onnx")
+        assert os.path.exists(
+            onnx_nms_file
+        ), "ONNX model with postprocess is not found!\n Run tools/trt.py first!"
+        trt_file = None
+        onnx_file = None
+        decoder = None
     else:
         trt_file = None
+        onnx_file = None
+        onnx_nms_file = None
         decoder = None
 
     # start evaluate
     *_, summary = evaluator.evaluate(
-        model, is_distributed, args.fp16, trt_file, decoder, exp.test_size
+        model, is_distributed, args.fp16, trt_file, onnx_file, onnx_nms_file, decoder, exp.test_size
     )
     logger.info("\n" + summary)
 

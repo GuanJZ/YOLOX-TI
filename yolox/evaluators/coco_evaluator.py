@@ -54,6 +54,8 @@ class COCOEvaluator:
         distributed=False,
         half=False,
         trt_file=None,
+        onnx_file=None,
+        onnx_nms_file=None,
         decoder=None,
         test_size=None,
     ):
@@ -94,6 +96,18 @@ class COCOEvaluator:
             model(x)
             model = model_trt
 
+        if onnx_file is not None:
+            import onnxruntime
+            logger.info("Init ONNX Model ...")
+            model = onnxruntime.InferenceSession(onnx_file, None)
+            input_name = model.get_inputs()[0].name
+
+        if onnx_nms_file is not None:
+            import onnxruntime
+            logger.info("Init ONNX Model with postprocess ...")
+            model = onnxruntime.InferenceSession(onnx_nms_file, None)
+            input_name = model.get_inputs()[0].name
+
         for cur_iter, (imgs, _, info_imgs, ids) in enumerate(
             progress_bar(self.dataloader)
         ):
@@ -104,23 +118,25 @@ class COCOEvaluator:
                 is_time_record = cur_iter < len(self.dataloader) - 1
                 if is_time_record:
                     start = time.time()
-
-                outputs = model(imgs)
+                if onnx_file is not None or onnx_nms_file is not None:
+                    outputs = torch.tensor(model.run([], {input_name: imgs.cpu().numpy()})[0])
+                else:
+                    outputs = model(imgs)
                 if decoder is not None:
                     outputs = decoder(outputs, dtype=outputs.type())
 
                 if is_time_record:
                     infer_end = time_synchronized()
                     inference_time += infer_end - start
-
-                outputs = postprocess(
-                    outputs, self.num_classes, self.confthre, self.nmsthre
-                )
+                if onnx_nms_file is None:
+                    outputs = postprocess(
+                        outputs, self.num_classes, self.confthre, self.nmsthre
+                    )
                 if is_time_record:
                     nms_end = time_synchronized()
                     nms_time += nms_end - infer_end
 
-            data_list.extend(self.convert_to_coco_format(outputs, info_imgs, ids))
+            data_list.extend(self.convert_to_coco_format(outputs, info_imgs, ids, onnx_nms_file))
 
         statistics = torch.cuda.FloatTensor([inference_time, nms_time, n_samples])
         if distributed:
@@ -132,8 +148,10 @@ class COCOEvaluator:
         synchronize()
         return eval_results
 
-    def convert_to_coco_format(self, outputs, info_imgs, ids):
+    def convert_to_coco_format(self, outputs, info_imgs, ids, onnx_nms_file):
         data_list = []
+        if onnx_nms_file is not None:
+            outputs = [outputs]
         for (output, img_h, img_w, img_id) in zip(
             outputs, info_imgs[0], info_imgs[1], ids
         ):
@@ -150,8 +168,12 @@ class COCOEvaluator:
             bboxes /= scale
             bboxes = xyxy2xywh(bboxes)
 
-            cls = output[:, 6]
-            scores = output[:, 4] * output[:, 5]
+            if onnx_nms_file is None:
+                cls = output[:, 6]
+                scores = output[:, 4] * output[:, 5]
+            else:
+                cls = output[:, 5]
+                scores = output[:, 4]
             for ind in range(bboxes.shape[0]):
                 label = self.dataloader.dataset.class_ids[int(cls[ind])]
                 pred_data = {
