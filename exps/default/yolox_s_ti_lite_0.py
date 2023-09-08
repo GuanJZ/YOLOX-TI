@@ -12,9 +12,9 @@ class Exp(MyExp):
         super(Exp, self).__init__()
         self.depth = 0.33
         self.width = 0.50
-        self.train_ann = "instances_val2017.json"
+        self.train_ann = "instances_train2017_raw.json"
         self.val_ann = "instances_val2017.json"
-        self.train_name = "val2017"
+        self.name = "train2017_raw"
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.act = "relu"
 

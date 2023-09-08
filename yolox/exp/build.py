@@ -30,7 +30,10 @@ def get_exp_by_name(exp_name):
         "yolox-nano": "nano.py",
         "yolov3": "yolov3.py",
         "yolox-s-ti-lite": "yolox_s_ti_lite.py",
+        "yolox-s-ti-lite-0": "yolox_s_ti_lite_0.py",
         "yolox-s-ti-lite-1": "yolox_s_ti_lite_1.py",
+        "yolox-s-ti-lite-debug-rope2d291": "yolox_s_ti_lite_debug_rope2d291.py",
+        "yolox-s-ti-lite-rope2d": "yolox_s_ti_lite_rope2d.py",
     }
     filename = filedict[exp_name]
     exp_path = os.path.join(yolox_path, "exps", "default", filename)
