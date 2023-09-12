@@ -213,7 +213,7 @@ class MosaicDetection(Dataset):
         keep_list = box_candidates(cp_bboxes_origin_np.T, cp_bboxes_transformed_np.T, 5)
 
         if keep_list.sum() >= 1.0:
-            cls_labels = cp_labels[keep_list, 4:5].copy()
+            cls_labels = cp_labels[keep_list, 4:].copy()
             box_labels = cp_bboxes_transformed_np[keep_list]
             labels = np.hstack((box_labels, cls_labels))
             origin_labels = np.vstack((origin_labels, labels))

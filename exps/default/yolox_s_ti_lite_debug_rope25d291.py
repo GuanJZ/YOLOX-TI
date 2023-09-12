@@ -26,7 +26,7 @@ class Exp(MyExp):
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.act = "relu"
         self.print_interval = 10
-        self.eval_interval = 5
+        self.eval_interval = 1
         self.enable_mixup = True
 
 
@@ -144,3 +144,21 @@ class Exp(MyExp):
         val_loader = torch.utils.data.DataLoader(valdataset, **dataloader_kwargs)
 
         return val_loader
+
+
+    def get_evaluator(self, batch_size, is_distributed, testdev=False):
+        from yolox.evaluators import COCOEvaluator
+
+        val_loader = self.get_eval_loader(batch_size, is_distributed, testdev=testdev)
+        evaluator = COCOEvaluator(
+            dataloader=val_loader,
+            img_size=self.test_size,
+            confthre=self.test_conf,
+            nmsthre=self.nmsthre,
+            num_classes=self.num_classes,
+            testdev=testdev,
+        )
+        return evaluator
+
+    def eval(self, model, evaluator, is_distributed, half=False):
+        return evaluator.evaluate(model, is_distributed, half)
