@@ -93,6 +93,10 @@ class COCODataset(Dataset):
         return self.annotations[index][0]
 
     def pull_item(self, index):
+
+        if index > len(self.ids) - 1:
+            print(index)
+            index = len(self.ids) -1
         id_ = self.ids[index]
 
         res, img_info, file_name = self.annotations[index]
