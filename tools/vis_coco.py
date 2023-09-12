@@ -5,9 +5,11 @@ from pycocotools.coco import COCO
 from skimage import io
 from matplotlib import pyplot as plt
 
-# train_json = 'datasets/Rope2D291/annotations_true/instances_val.json'
-train_json = 'datasets/Rope3D/annotations/instances_val.json'
-train_path = 'datasets/Rope3D/images/val/'
+train_json = 'datasets/Rope3D/annotations_2.5D/instances_train.json'
+train_path = 'datasets/Rope3D/images/train/'
+
+train_json = 'datasets/Rope2D291/annotations_2.5D/instances_train.json'
+train_path = 'datasets/Rope2D291/images/train/'
 
 # train_json = 'datasets/COCO/annotations/instances_val2017.json'
 # train_path = 'datasets/COCO/images/val2017/'
@@ -45,4 +47,4 @@ def visualization_bbox_seg(num_image, json_path, img_path, *str):# 需要画图�
     # cv2.waitKey(0)
 
 if __name__ == "__main__":
-   visualization_bbox_seg(3434, train_json, train_path) # 最后一个参数不写就是画出一张图中的所有类别
+   visualization_bbox_seg(123, train_json, train_path) # 最后一个参数不写就是画出一张图中的所有类别
