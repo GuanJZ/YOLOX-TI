@@ -22,6 +22,7 @@ class Exp(MyExp):
         self.val_ann = "instances_val.json"
         self.train_name = "train"
         self.val_name = "val"
+        self.label_type = "2D"
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.act = "relu"
         self.print_interval = 10
@@ -48,9 +49,9 @@ class Exp(MyExp):
         return self.model
 
     def get_eval_loader(self, batch_size, is_distributed, testdev=False):
-        from yolox.data import COCODataset, ValTransform
+        from yolox.data import RopeDataset, ValTransform
 
-        valdataset = COCODataset(
+        valdataset = RopeDataset(
             data_dir=self.data_dir,
             json_file=self.val_ann if not testdev else "image_info_test-dev2017.json",
             name=self.val_name,
@@ -58,6 +59,7 @@ class Exp(MyExp):
             preproc=ValTransform(
                 rgb_means=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
             ),
+            label_type=self.label_type,
         )
 
         if is_distributed:
