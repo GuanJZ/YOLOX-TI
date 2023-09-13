@@ -14,7 +14,7 @@ class Exp(MyExp):
         self.width = 0.50
         self.train_ann = "instances_train2017_raw.json"
         self.val_ann = "instances_val2017.json"
-        self.name = "train2017_raw"
+        self.train_name = "train2017_raw"
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.act = "relu"
 
