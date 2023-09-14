@@ -16,7 +16,7 @@ class Exp(MyExp):
         self.depth = 0.33
         self.width = 0.50
         self.num_classes = 4
-        self.data_num_workers = 0
+        self.data_num_workers = 8
         self.data_dir = "datasets/Rope2D291/"
         self.train_ann = "instances_train.json"
         self.val_ann = "instances_val.json"
@@ -26,7 +26,7 @@ class Exp(MyExp):
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.act = "relu"
         self.print_interval = 10
-        self.eval_interval = 1
+        self.eval_interval = 5
         self.enable_mixup = True
 
 

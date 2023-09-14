@@ -213,7 +213,8 @@ class TrainTransform:
 
     def __call__(self, image, targets, input_dim):
         boxes = targets[:, :4].copy()
-        labels = targets[:, 4:].copy()
+        labels = targets[:, 4].copy()
+        other_labels = targets[:, 5:].copy()
         if len(boxes) == 0:
             targets = np.zeros((self.max_labels, 21), dtype=np.float32)
             image, r_o = preproc(image, input_dim, self.means, self.std)
@@ -224,7 +225,8 @@ class TrainTransform:
         targets_o = targets.copy()
         height_o, width_o, _ = image_o.shape
         boxes_o = targets_o[:, :4]
-        labels_o = targets_o[:, 4:]
+        labels_o = targets_o[:, 4]
+        other_labels_o = targets_o[:, 5:]
         # bbox_o: [xyxy] to [c_x,c_y,w,h]
         boxes_o = xyxy2cxcywh(boxes_o)
 
@@ -239,16 +241,19 @@ class TrainTransform:
         mask_b = np.minimum(boxes[:, 2], boxes[:, 3]) > 8
         boxes_t = boxes[mask_b]
         labels_t = labels[mask_b]
+        other_labels_t = other_labels[mask_b]
 
         if len(boxes_t) == 0:
             image_t, r_o = preproc(image_o, input_dim, self.means, self.std)
             boxes_o *= r_o
             boxes_t = boxes_o
             labels_t = labels_o
+            other_labels_t = other_labels_o
 
-        # labels_t = np.expand_dims(labels_t, 1)
+        labels_t = np.expand_dims(labels_t, 1)
+        print("1111111111111111111111")
 
-        targets_t = np.hstack((labels_t, boxes_t))
+        targets_t = np.hstack((labels_t, boxes_t, other_labels_t))
         padded_labels = np.zeros((self.max_labels, 21))
         padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
             : self.max_labels

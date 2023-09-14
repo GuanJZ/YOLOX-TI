@@ -115,6 +115,8 @@ def main(args):
             pbar.close()
 
 
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--rope3d_path', default='datasets/Rope2D291/labels_raw')
