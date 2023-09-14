@@ -13,15 +13,55 @@ import cv2
 import traceback
 from multiprocessing.pool import Pool
 
+from yolox.utils import (
+    Data, detect_data,
+    read_kitti_ext,
+    read_kitti_cal,
+    get_camera_3d_8points_g2c,
+    project_3d_world,
+    color_list
+)
 
+# class_names = ["Pedestrian", "Truck", "Car", "Cyclist", "Misc"]
 class_names = ['pedestrian', 'cyclist', 'car', 'big_vehicle']
 class_ids = {}
 for class_id, class_name in enumerate(class_names):
     class_ids[class_name] = float(class_id)
 
-NUM_THREADS = max(48, os.cpu_count())
+NUM_THREADS = min(48, os.cpu_count())
 
 bins, overlap = 2, 0.1
+
+def get_keypoint(args):
+    label, img_path, img_shape = args
+    import copy
+    label_cpoy = copy.deepcopy(label)
+    # img = cv2.imread(img_path)
+    result = detect_data(label_cpoy, class_names)
+    name = os.path.basename(img_path)
+    calib_file = img_path.replace("images", "calibs").replace("jpg", "txt")
+    p2 = read_kitti_cal(calib_file)
+
+    extrinsic_file = img_path.replace("images", "extrinsics").replace("jpg", "yaml")
+    world2camera = read_kitti_ext(extrinsic_file).reshape((4, 4))
+    camera2world = np.linalg.inv(world2camera).reshape(4, 4)
+
+    keypoints = []
+    for result_index in range(len(result)):
+        t = result[result_index]
+        cam_bottom_center = [t.X, t.Y, t.Z]  # bottom center in Camera coordinate
+
+        bottom_center_in_world = camera2world * np.matrix(cam_bottom_center + [1.0]).T
+        verts3d = project_3d_world(p2, bottom_center_in_world, t.w, t.h, t.l, t.yaw, camera2world)
+
+        if verts3d is None:
+            continue
+        verts3d = verts3d.astype(int)
+        keypoint = (verts3d[3] + verts3d[2]) / 2
+        keypoint = keypoint / img_shape[::-1]
+        keypoints.append(keypoint)
+
+    return np.asarray(keypoints)
 
 
 def convert_label2yolo(args):
@@ -41,6 +81,120 @@ def convert_label2yolo(args):
 def get_image_shape(image_path):
     return cv2.imread(image_path).shape[:2]
 
+def attributes_3d_keypoint_preprocess(img_paths, labels, save_keypoint):
+    """
+    Args:
+        img_paths (tuple(str)): all img paths
+        labels (tuple(ndarray)): all labels (type_id, truncated, occluded, alpha, x1, y1, x2, y2, H, W, L, X, Y, Z, ry)
+    Return:
+        labels (tuple(ndarray)): propcessed all labels (type_id, cx, cy, w, h, H, W, L, X, Y, Z, ry, bin_conf, bin_cos_sin, keypoint_x, keypoint_y, truncated, occluded, alpha, )
+    """
+
+    # angle_bins
+    interval = 2 * np.pi / bins
+    angle_bins = np.zeros(bins)
+    for i in range(1, bins):
+        angle_bins[i] = i * interval
+    angle_bins += interval / 2 # center of the bin
+
+    # bin_ranges for confidence
+    # [(min angle in bin, max angle in bin), ...]
+    bin_ranges = np.zeros((bins, 2))
+    for i in range(0, bins):
+        bin_ranges[i, 0] = (i * interval - overlap) % (2 * np.pi)
+        bin_ranges[i, 1] = (i * interval + interval + overlap) % (2 * np.pi)
+
+    def get_bin(angle, bin_ranges):
+        bin_idxs = []
+
+        def is_between(min, max, angle):
+            max = (max - min) if (max - min) > 0 else (max - min) + 2 * np.pi
+            angle = (angle - min) if (angle - min) > 0 else (angle - min) + 2 * np.pi
+            return angle < max
+
+        for bin_idx, bin_range in enumerate(bin_ranges):
+            if is_between(bin_range[0], bin_range[1], angle):
+                bin_idxs.append(bin_idx)
+
+        return bin_idxs
+
+    # orientations, confidences
+    orientations = []
+    confidences = []
+    print("orient and conf ...")
+    for i in tqdm(range(len(labels))):
+        nl = labels[i].shape[0]
+        orientation = np.zeros((nl, bins, 2))
+        confidence  = np.zeros((nl, bins))
+        angles = (labels[i][:, 3] + np.pi).reshape(nl, 1)
+        for an_id, angle in enumerate(angles):
+            bin_idxs = get_bin(angle[0], bin_ranges)
+            for bin_idx in bin_idxs:
+                angle_diff = angle - angle_bins[bin_idx]
+                orientation[an_id, bin_idx, :] = np.array([np.cos(angle_diff), np.sin(angle_diff)]).squeeze(axis=1)
+                confidence[an_id, bin_idx] = 1
+
+        orientations.append(orientation)
+        confidences.append(confidence)
+    print("image shape ...")
+    imgs_shape = []
+    with Pool(NUM_THREADS) as pool:
+        pbar = pool.imap(get_image_shape, img_paths)
+        pbar = tqdm(pbar, total=len(img_paths))
+        for img_shape in pbar:
+            imgs_shape.append(img_shape)
+    pbar.close()
+
+    if save_keypoint:
+        # bbcp keypoint
+        print("get bbcp keypoints ...")
+        keypoints = []
+        with Pool(NUM_THREADS) as pool:
+            pbar = pool.imap(get_keypoint, zip(labels, img_paths, imgs_shape))
+            pbar = tqdm(pbar, total=len(labels))
+            for keypoint in pbar:
+                keypoints.append(keypoint)
+        pbar.close()
+
+    # (type_id, truncated, occluded, alpha, x1, y1, x2, y2, H, W, L, X, Y, Z, ry)
+    # to
+    # (type_id, truncated, occluded, alpha, xc, yc, w, h, H, W, L, X, Y, Z, ry)
+
+    print("xyxy -> cxcywh ...")
+    for i, label in tqdm(enumerate(labels)):
+        # xyxy-> cxcywh
+        H, W = imgs_shape[i]
+        label[:, 6] = (label[:, 6] - label[:, 4]) / W
+        label[:, 7] = (label[:, 7] - label[:, 5]) / H
+        label[:, 4] = label[:, 4] / W + label[:, 6] / 2
+        label[:, 5] = label[:, 5] / H + label[:, 7] / 2
+
+    # (type_id, truncated, occluded, alpha,xc, yc, w, h, H, W, L, X, Y, Z, ry)
+    # to
+    # (type_id, truncated, occluded, alpha, xc, yc, w, h, H, W, L, X, Y, Z, ry, cos, sin, confidence, bbcp_x, bbcp_y)
+    labels_tmp = []
+    if save_keypoint:
+        for label, orientation, confidence, keypoint in zip(labels, orientations, confidences, keypoints):
+            labels_tmp.append(
+                np.concatenate((label, orientation.reshape(-1, bins*2), confidence, keypoint), axis=1)
+            )
+    else:
+        for label, orientation, confidence in zip(labels, orientations, confidences):
+            labels_tmp.append(
+                np.concatenate((label, orientation.reshape(-1, bins*2), confidence), axis=1)
+            )
+
+    # (type_id, truncated, occluded, alpha, xc, yc, w, h, H, W, L, X, Y, Z, ry, cos, sin, confidence, bbcp_x, bbcp_y)
+    # to
+    # # (type_id, xc, yc, w, h, H, W, L, X, Y, Z, ry, cos, sin, confidence, bbcp_x, bbcp_y, truncated, occluded, alpha)
+    labels_final = []
+    for idx, label in enumerate(labels_tmp):
+        tmp = label[:, 1:4]
+        label = np.delete(label, [1, 2, 3], axis=1)
+        labels_final.append(np.concatenate((label, tmp), axis=1))
+
+
+    return labels_final
 
 fine2coarse = {}
 fine2coarse['van'] = 'car'
@@ -76,12 +230,16 @@ def main(args):
     TASK = args.task
     root = args.rope3d_path
     convert_type = args.convert_type
+    save_keypoints = args.with_keypoints
 
     for task in TASK:
         print(f"task: {task} ...")
         raw_labels_dir = f"{root}/{task}"
         imgs_dir = raw_labels_dir.replace("labels_raw", "images")
-        new_labels_path = raw_labels_dir.replace("labels_raw", f"labels_yolo_{convert_type}")
+        if save_keypoints:
+            new_labels_path = raw_labels_dir.replace("labels_raw", f"labels_yolo_{convert_type}_KEYPOINTS")
+        else:
+            new_labels_path = raw_labels_dir.replace("labels_raw", f"labels_yolo_{convert_type}")
         if os.path.exists(new_labels_path):
             shutil.rmtree(new_labels_path)
         os.makedirs(new_labels_path)
@@ -103,7 +261,7 @@ def main(args):
                     image_paths.append(os.path.join(imgs_dir, image_path))
                     shapes.append(shape)
             pbar.close()
-            print(f"Converting {convert_type}")
+            print(f"{convert_type}")
             new_labels_paths = [new_labels_path]*len(labels)
             with Pool(NUM_THREADS) as pool:
                 pbar = pool.imap(convert_label2yolo, zip(labels, image_paths, shapes, new_labels_paths))
@@ -114,15 +272,39 @@ def main(args):
                         print("failed")
             pbar.close()
 
+        if convert_type == "MONO_2.5D":
+            # 1. 将所有图像和labels保存在list中
+            # 2. 使用数据处理代码处理 list(image_paths)和list(labels)
+            print(f"convert type {convert_type} ...")
+            labels = []
+            image_paths = []
+            print("read labels ...")
+            with Pool(NUM_THREADS) as pool:
+                pbar = pool.imap(read_labels, zip(raw_labels_dir, raw_labels_list))
+                pbar = tqdm(pbar, total=len(raw_labels_list))
+                for label, image_path, _ in pbar:
+                    labels.append(label)
+                    image_paths.append(os.path.join(imgs_dir, image_path))
+            pbar.close()
+
+            print(f"{convert_type} ...")
+            labels = attributes_3d_keypoint_preprocess(image_paths, labels, save_keypoints)
+
+            print("saving ...")
+            for im_path, lb in tqdm(zip(image_paths, labels)):
+                lb_name = osp.basename(im_path).replace("jpg", "txt")
+                np.savetxt(osp.join(new_labels_path, lb_name), lb, delimiter=" ", fmt='%.08f')
+
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--rope3d_path', default='datasets/Rope2D291/labels_raw')
-    # parser.add_argument('--rope3d_path',default='data/Rope3D/labels_raw')
-    parser.add_argument('--convert_type', default="MONO_2D")
+    # parser.add_argument('--rope3d_path',default='datasets/Rope3D/labels_raw')
+    parser.add_argument('--convert_type', default="MONO_2.5D")
     parser.add_argument('--task', default=["train", "val"])
+    parser.add_argument('--with-keypoints', action='store_true')
     args = parser.parse_args()
     print(args)
 

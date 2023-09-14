@@ -391,8 +391,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Generating Datasets")
-    parser.add_argument("--data-path", type=str, default="datasets/Rope3D", help="")
-    # parser.add_argument("--data-path", type=str, default="datasets/Rope2D291", help="")
+    # parser.add_argument("--data-path", type=str, default="datasets/Rope3D", help="")
+    parser.add_argument("--data-path", type=str, default="datasets/Rope2D291", help="")
     parser.add_argument("--label-type", type=str, default="2.5D", help="")
     args = parser.parse_args()
     main(args)

@@ -251,8 +251,11 @@ class TrainTransform:
             other_labels_t = other_labels_o
 
         labels_t = np.expand_dims(labels_t, 1)
-        print("1111111111111111111111")
 
+        if labels_t.shape[0] != boxes_t.shape[0] or labels_t.shape[0] != other_labels_t.shape[0] or boxes_t.shape[0] != other_labels_t.shape[0]:
+            print(f"labels_t.shape -> {labels_t.shape}")
+            print(f"boxes_t.shape -> {boxes_t.shape}" )
+            print(f"other_labels_t.shape -> {other_labels_t.shape}")
         targets_t = np.hstack((labels_t, boxes_t, other_labels_t))
         padded_labels = np.zeros((self.max_labels, 21))
         padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
