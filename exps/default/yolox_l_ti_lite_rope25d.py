@@ -13,17 +13,17 @@ import torch.distributed as dist
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
-        self.depth = 0.33
-        self.width = 0.50
+        self.depth = 1.0
+        self.width = 1.0
+        self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.num_classes = 4
-        self.data_num_workers = 0
-        self.data_dir = "datasets/Rope2D291/"
+        self.data_num_workers = 8
+        self.data_dir = "datasets/Rope3D/"
         self.train_ann = "instances_train.json"
         self.val_ann = "instances_val.json"
         self.train_name = "train"
         self.val_name = "val"
         self.label_type = "2.5D"
-        self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
         self.act = "relu"
         self.print_interval = 10
         self.eval_interval = 5

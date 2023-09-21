@@ -252,10 +252,6 @@ class TrainTransform:
 
         labels_t = np.expand_dims(labels_t, 1)
 
-        if labels_t.shape[0] != boxes_t.shape[0] or labels_t.shape[0] != other_labels_t.shape[0] or boxes_t.shape[0] != other_labels_t.shape[0]:
-            print(f"labels_t.shape -> {labels_t.shape}")
-            print(f"boxes_t.shape -> {boxes_t.shape}" )
-            print(f"other_labels_t.shape -> {other_labels_t.shape}")
         targets_t = np.hstack((labels_t, boxes_t, other_labels_t))
         padded_labels = np.zeros((self.max_labels, 21))
         padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
@@ -284,12 +280,35 @@ class ValTransform:
         data
     """
 
-    def __init__(self, rgb_means=None, std=None, swap=(2, 0, 1)):
+    def __init__(self, rgb_means=None, std=None, swap=(2, 0, 1), max_labels=50):
         self.means = rgb_means
         self.swap = swap
         self.std = std
+        self.max_labels = max_labels
 
     # assume input is cv2 img for now
-    def __call__(self, img, res, input_size):
-        img, _ = preproc(img, input_size, self.means, self.std, self.swap)
-        return img, np.zeros((1, 21))
+    def __call__(self, image, targets, input_dim):
+        boxes = targets[:, :4].copy()
+        labels = targets[:, 4].copy()
+        other_labels = targets[:, 5:].copy()
+        if len(boxes) == 0:
+            targets = np.zeros((self.max_labels, 21), dtype=np.float32)
+            image, r_o = preproc(image, input_dim, self.means, self.std)
+            image = np.ascontiguousarray(image, dtype=np.float32)
+            return image, targets
+
+        image, r_ = preproc(image, input_dim, self.means, self.std, self.swap)
+        # boxes [xyxy] 2 [cx,cy,w,h]
+        boxes = xyxy2cxcywh(boxes)
+        boxes *= r_
+
+        labels = np.expand_dims(labels, 1)
+
+        targets_t = np.hstack((labels, boxes, other_labels))
+        padded_labels = np.zeros((self.max_labels, 21))
+        padded_labels[range(len(targets_t))[: self.max_labels]] = targets_t[
+                                                                  : self.max_labels
+                                                                  ]
+        padded_labels = np.ascontiguousarray(padded_labels, dtype=np.float32)
+        image_t = np.ascontiguousarray(image, dtype=np.float32)
+        return image_t, padded_labels

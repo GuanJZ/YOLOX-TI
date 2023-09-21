@@ -112,6 +112,37 @@ class Exp(MyExp):
 
         return train_loader
 
+    def get_eval_loader(self, batch_size, is_distributed, testdev=False):
+        from yolox.data import RopeDataset, ValTransform
+
+        valdataset = RopeDataset(
+            data_dir=self.data_dir,
+            json_file=self.val_ann if not testdev else "image_info_test-dev2017.json",
+            name="val2017" if not testdev else "test2017",
+            img_size=self.test_size,
+            preproc=ValTransform(
+                rgb_means=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)
+            ),
+        )
+
+        if is_distributed:
+            batch_size = batch_size // dist.get_world_size()
+            sampler = torch.utils.data.distributed.DistributedSampler(
+                valdataset, shuffle=False
+            )
+        else:
+            sampler = torch.utils.data.SequentialSampler(valdataset)
+
+        dataloader_kwargs = {
+            "num_workers": self.data_num_workers,
+            "pin_memory": True,
+            "sampler": sampler,
+        }
+        dataloader_kwargs["batch_size"] = batch_size
+        val_loader = torch.utils.data.DataLoader(valdataset, **dataloader_kwargs)
+
+        return val_loader
+
 
     def get_eval_loader(self, batch_size, is_distributed, testdev=False):
         from yolox.data import RopeDataset, ValTransform
@@ -147,10 +178,10 @@ class Exp(MyExp):
 
 
     def get_evaluator(self, batch_size, is_distributed, testdev=False):
-        from yolox.evaluators import COCOEvaluator
+        from yolox.evaluators import RopeEvaluator
 
         val_loader = self.get_eval_loader(batch_size, is_distributed, testdev=testdev)
-        evaluator = COCOEvaluator(
+        evaluator = RopeEvaluator(
             dataloader=val_loader,
             img_size=self.test_size,
             confthre=self.test_conf,

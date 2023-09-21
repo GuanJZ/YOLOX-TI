@@ -101,10 +101,14 @@ def detect_data(pred, class_names):
             t_data.score = round(float(fields[15]), 2)  # detection score
             t_data.keypoint_x = int(float(fields[16]))
             t_data.keypoint_y = int(float(fields[17]))
-        if len(fields) == 17:
+        elif len(fields) == 17:
             t_data.score = 1
             t_data.keypoint_x = int(float(fields[15]))
             t_data.keypoint_y = int(float(fields[16]))
+        elif len(fields) == 16:
+            t_data.score = round(float(fields[15]), 2)  # detection score
+        else:
+            t_data.score = 1
 
         t_data.detect_id = index
         data.append(t_data)
@@ -248,10 +252,12 @@ def show(args):
     target = detect_data(label, class_names)
 
     name = os.path.basename(img_path)
-    calib_file = img_path.replace("images", "calibs").replace("jpg", "txt")
+
+    path_tmp = img_path.split("/")
+    calib_file = os.path.join(path_tmp[0], path_tmp[1], "calibs", path_tmp[2], path_tmp[3].replace("jpg", "txt"))
     p2 = read_kitti_cal(calib_file)
 
-    extrinsic_file = img_path.replace("images", "extrinsics").replace("jpg", "yaml")
+    extrinsic_file = os.path.join(path_tmp[0], path_tmp[1], "extrinsics", path_tmp[2], path_tmp[3].replace("jpg", "yaml"))
     world2camera = read_kitti_ext(extrinsic_file).reshape((4, 4))
     camera2world = np.linalg.inv(world2camera).reshape(4, 4)
 
@@ -269,8 +275,8 @@ def show(args):
         color_type = color_list[t.obj_type]
         color = (color_type[0] * 255, color_type[1] * 255, color_type[2] * 255)
         if show_pred_2d:
-            cv2.rectangle(img, (t.x1, t.y1), (t.x2, t.y2),
-                          color, 2)
+            # cv2.rectangle(img, (t.x1, t.y1), (t.x2, t.y2),
+            #               color, 2)
             # 标签的颜色
             txt_color = (0, 0, 0) if (sum(color_type) / len(color_type)) > 0.5 else (255, 255, 255)
             txt_bk_color = (color_type[0] * 255 * 0.7, color_type[1] * 255 * 0.7, color_type[2] * 255 * 0.7)
@@ -307,7 +313,7 @@ def show(args):
         cv2.line(img, tuple(verts3d[2]), tuple(verts3d[6]), color, 2)
         cv2.line(img, tuple(verts3d[0]), tuple(verts3d[5]), (0, 0, 0), 1)
         cv2.line(img, tuple(verts3d[1]), tuple(verts3d[4]), (0, 0, 0), 1)
-        cv2.circle(img, tuple((t.keypoint_x, t.keypoint_y)), radius=10, color=color, thickness=-1)
+        # cv2.circle(img, tuple((t.keypoint_x, t.keypoint_y)), radius=10, color=color, thickness=-1)
 
     for target_index in range(len(target)):
         t = target[target_index]
@@ -315,7 +321,7 @@ def show(args):
             continue
         if t.obj_type not in color_list.keys():
             continue
-        # color_type = color_list[t.obj_type]
+        color_type = color_list[t.obj_type]
         # cv2.rectangle(img, (t.x1, t.y1), (t.x2, t.y2),
         #               (255, 255, 255), 1)
         if t.w <= 0.05 and t.l <= 0.05 and t.h <= 0.05:  # invalid annotation
@@ -345,7 +351,7 @@ def show(args):
         cv2.line(img, tuple(verts3d[2]), tuple(verts3d[6]), (255, 255, 255), 1)
         cv2.line(img, tuple(verts3d[0]), tuple(verts3d[5]), (255, 255, 255), 1)
         cv2.line(img, tuple(verts3d[1]), tuple(verts3d[4]), (255, 255, 255), 1)
-        cv2.circle(img, tuple((t.keypoint_x, t.keypoint_y)), radius=5, color=(255, 255, 255), thickness=-1)
+        # cv2.circle(img, tuple((t.keypoint_x, t.keypoint_y)), radius=5, color=(255, 255, 255), thickness=-1)
 
     return name, img
 
@@ -358,8 +364,9 @@ def show_2d3d_box(preds, labels, img_paths, class_names, save_dir, is_show_pred_
     """
 
     out_dir = os.path.join(save_dir, "3D_BBoxes_VIS")
-    if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+    if os.path.exists(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
 
     global show_pred_2d
     show_pred_2d = is_show_pred_2d

@@ -292,9 +292,10 @@ class YOLOXHead(nn.Module):
 
             else:
                 output = torch.cat(
-                    [reg_output, obj_output, cls_output], 1
+                    [reg_output, obj_output, cls_output, dim_output, orint_output, conf_output], 1
                 )
                 output[:, 4:9, :, :] = torch.sigmoid(output[:, 4:9, :, :])
+                output[:, 9:12, :, :] = torch.exp(output[:, 9:12, :, :])
                 output[:, 16:18, :, :] = torch.sigmoid(output[:, 16:18, :, :])
 
             outputs.append(output)
@@ -532,7 +533,7 @@ class YOLOXHead(nn.Module):
             )
         ).sum() / num_fg
         loss_dim = (
-            self.l1_loss(dim_preds.view(-1, 3)[fg_masks], dim_targets)
+            self.l1_loss(dim_preds.view(-1, 3)[fg_masks], dim_targets.log())
         ).sum() / num_fg
 
         loss_orint = self.orint_loss(orint_preds.view(-1, 4)[fg_masks], orint_targets, conf_targets)

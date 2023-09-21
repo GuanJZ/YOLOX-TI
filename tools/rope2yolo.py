@@ -300,8 +300,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rope3d_path', default='datasets/Rope2D291/labels_raw')
-    # parser.add_argument('--rope3d_path',default='datasets/Rope3D/labels_raw')
+    # parser.add_argument('--rope3d_path', default='datasets/Rope2D291/labels_raw')
+    parser.add_argument('--rope3d_path',default='datasets/Rope3D/labels_raw')
     parser.add_argument('--convert_type', default="MONO_2.5D")
     parser.add_argument('--task', default=["train", "val"])
     parser.add_argument('--with-keypoints', action='store_true')

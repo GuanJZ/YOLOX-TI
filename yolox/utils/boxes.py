@@ -17,6 +17,7 @@ __all__ = [
     "xyxy2xywh",
     "xyxy2cxcywh",
     "PostprocessExport",
+    "box_iou",
 ]
 
 
@@ -50,7 +51,7 @@ def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
 
         conf_mask = (image_pred[:, 4] * class_conf.squeeze() >= conf_thre).squeeze()
         # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
-        detections = torch.cat((image_pred[:, :5], class_conf, class_pred.float()), 1)
+        detections = torch.cat((image_pred[:, :5], class_conf, class_pred.float(), image_pred[:, 9:]), 1)
         detections = detections[conf_mask]
         if not detections.size(0):
             continue
@@ -87,8 +88,8 @@ def postprocess_export(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
         class_conf, class_pred = torch.max(image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
         conf =  image_pred[:, 4:5] * class_conf
         conf_mask = (conf.squeeze() >= conf_thre).squeeze()
-        # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
-        detections = torch.cat((image_pred[:, :4], conf, class_pred.float()), 1)
+        # Detections ordered as (x1, y1, x2, y2, class_conf, class_pred)
+        detections = torch.cat((image_pred[:, :4], conf, class_pred.float(), image_pred[:, 9:]), 1)
 
         detections = detections[conf_mask]
         if not detections.size(0):
@@ -147,6 +148,29 @@ def matrix_iou(a, b):
     area_b = np.prod(b[:, 2:] - b[:, :2], axis=1)
     return area_i / (area_a[:, np.newaxis] + area_b - area_i + 1e-12)
 
+def box_iou(box1, box2):
+    # https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
+    """
+    Return intersection-over-union (Jaccard index) of boxes.
+    Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+    Arguments:
+        box1 (Tensor[N, 4])
+        box2 (Tensor[M, 4])
+    Returns:
+        iou (Tensor[N, M]): the NxM matrix containing the pairwise
+            IoU values for every element in boxes1 and boxes2
+    """
+
+    def box_area(box):
+        # box = 4xn
+        return (box[2] - box[0]) * (box[3] - box[1])
+
+    area1 = box_area(box1.T)
+    area2 = box_area(box2.T)
+
+    # inter(N,M) = (rb(N,M,2) - lt(N,M,2)).clamp(0).prod(2)
+    inter = (torch.min(box1[:, None, 2:], box2[:, 2:]) - torch.max(box1[:, None, :2], box2[:, :2])).clamp(0).prod(2)
+    return inter / (area1[:, None] + area2 - inter)  # iou = inter / (area1 + area2 - inter)
 
 def adjust_box_anns(bbox, scale_ratio, padw, padh, w_max, h_max):
     bbox[:, 0::2] = np.clip(bbox[:, 0::2] * scale_ratio + padw, 0, w_max)
@@ -178,6 +202,16 @@ def cxcywh2xyxy_export(cx,cy,w,h):
     ymax = cy + halfh  # bottom right y
     return torch.cat((xmin, ymin, xmax, ymax), 2)
 
+def cxcywh2xyxy(cx,cy,w,h):
+    #This function is used while exporting ONNX models
+    # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+    halfw = w/2
+    halfh = h/2
+    xmin = cx - halfw  # top left x
+    ymin = cy - halfh # top left y
+    xmax = cx + halfw  # bottom right x
+    ymax = cy + halfh  # bottom right y
+    return torch.cat((xmin, ymin, xmax, ymax), 1)
 
 class PostprocessExport(nn.Module):
     def __init__(self, conf_thre=0.7, nms_thre=0.45, num_classes=80, object_pose=False, camera_matrix=None):

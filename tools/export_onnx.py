@@ -127,7 +127,7 @@ def main():
     if "model" in ckpt:
         ckpt = ckpt["model"]
     model.load_state_dict(ckpt)
-    model = replace_module(model, nn.SiLU, SiLU)
+    # model = replace_module(model, nn.SiLU, SiLU)
     # if not args.export_det:
     #     model.head.decode_in_inference = False
     if args.export_det:
@@ -165,8 +165,6 @@ def main():
             args.output_name,
             input_names=[args.input],
             output_names=[args.output],
-            dynamic_axes={args.input: {0: 'batch'},
-                          args.output: {0: 'batch'}} if args.dynamic else None,
             opset_version=args.opset,
         )
         logger.info("generated onnx model without nms part named {}".format(args.output_name))

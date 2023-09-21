@@ -147,7 +147,7 @@ def main(exp, args, num_gpu):
 
     model = exp.get_model()
     logger.info("Model Summary: {}".format(get_model_info(model, exp.test_size)))
-    # logger.info("Model Structure:\n{}".format(str(model)))
+    logger.info("Model Structure:\n{}".format(str(model)))
 
     evaluator = exp.get_evaluator(args.batch_size, is_distributed, args.test)
 
@@ -214,10 +214,10 @@ def main(exp, args, num_gpu):
         decoder = None
 
     # start evaluate
-    *_, summary = evaluator.evaluate(
-        model, is_distributed, args.fp16, trt_file, onnx_file, onnx_nms_file, decoder, exp.test_size
+    evaluator.evaluate(
+        model, is_distributed, args.fp16, trt_file, onnx_file, onnx_nms_file, decoder, exp.test_size, file_name, False
     )
-    logger.info("\n" + summary)
+
 
 
 if __name__ == "__main__":
