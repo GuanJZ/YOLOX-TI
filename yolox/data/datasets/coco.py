@@ -108,7 +108,7 @@ class COCODataset(Dataset):
         img = cv2.imread(img_file)
         assert img is not None
 
-        return img, res.copy(), img_info, np.array([id_])
+        return img, res.copy(), img_info, np.array([id_]), file_name
 
     @Dataset.resize_getitem
     def __getitem__(self, index):
@@ -132,8 +132,8 @@ class COCODataset(Dataset):
                 dx, dy (int): pad size
             img_id (int): same as the input index. Used for evaluation.
         """
-        img, target, img_info, img_id = self.pull_item(index)
+        img, target, img_info, img_id, file_name  = self.pull_item(index)
 
         if self.preproc is not None:
             img, target = self.preproc(img, target, self.input_dim)
-        return img, target, img_info, img_id
+        return img, target, img_info, img_id, file_name

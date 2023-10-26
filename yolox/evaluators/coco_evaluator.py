@@ -10,6 +10,7 @@ import tempfile
 import time
 from loguru import logger
 from tqdm import tqdm
+import numpy as np
 
 import torch
 
@@ -30,7 +31,7 @@ class COCOEvaluator:
     """
 
     def __init__(
-        self, dataloader, img_size, confthre, nmsthre, num_classes, testdev=False
+        self, dataloader, img_size, confthre, nmsthre, num_classes, data_dir, testdev=False, save_yolo_text=False,
     ):
         """
         Args:
@@ -46,7 +47,9 @@ class COCOEvaluator:
         self.confthre = confthre
         self.nmsthre = nmsthre
         self.num_classes = num_classes
+        self.data_dir = data_dir
         self.testdev = testdev
+        self.save_yolo_text = save_yolo_text
 
     def evaluate(
         self,
@@ -80,6 +83,9 @@ class COCOEvaluator:
             model = model.half()
         ids = []
         data_list = []
+        if self.save_yolo_text:
+            yolo_list = []
+            pred_files_name = []
         progress_bar = tqdm if is_main_process() else iter
 
         inference_time = 0
@@ -108,7 +114,7 @@ class COCOEvaluator:
             model = onnxruntime.InferenceSession(onnx_nms_file, None)
             input_name = model.get_inputs()[0].name
 
-        for cur_iter, (imgs, _, info_imgs, ids) in enumerate(
+        for cur_iter, (imgs, _, info_imgs, ids, files_name) in enumerate(
             progress_bar(self.dataloader)
         ):
             with torch.no_grad():
@@ -137,6 +143,17 @@ class COCOEvaluator:
                     nms_time += nms_end - infer_end
 
             data_list.extend(self.convert_to_coco_format(outputs, info_imgs, ids, onnx_nms_file))
+            if self.save_yolo_text:
+                yolo_list.extend(self.convert_to_yolo_format(outputs, info_imgs, ids, files_name, onnx_nms_file))
+                pred_files_name.extend(files_name)
+        if self.save_yolo_text:
+            import os
+            files_save_dir = os.path.join(self.data_dir, "preds_yolo_MONO_2D")
+            if not os.path.exists(files_save_dir):
+                os.makedirs(files_save_dir)
+            for yolo_res, file_name in zip(yolo_list, pred_files_name):
+                file_save_path = os.path.join(files_save_dir, file_name.replace("jpg", "txt"))
+                np.savetxt(file_save_path, np.around(yolo_res, 6), delimiter=" ")
 
         statistics = torch.cuda.FloatTensor([inference_time, nms_time, n_samples])
         if distributed:
@@ -147,6 +164,46 @@ class COCOEvaluator:
         eval_results = self.evaluate_prediction(data_list, statistics)
         synchronize()
         return eval_results
+
+    def convert_to_yolo_format(self, outputs, info_imgs, ids, files_name, onnx_nms_file):
+        data_list = []
+        if onnx_nms_file is not None:
+            outputs = [outputs]
+        for (output, img_h, img_w, img_id) in zip(
+                outputs, info_imgs[0], info_imgs[1], ids
+        ):
+            if output is None:
+                continue
+
+            output = output.cpu().numpy()
+
+            if onnx_nms_file is None:
+                cls = output[:, 6]
+                scores = output[:, 4] * output[:, 5]
+            else:
+                cls = output[:, 5]
+                scores = output[:, 4]
+
+            predn = np.zeros((output.shape[0], 6))
+            bboxes = output[:, 0:4]
+
+            # preprocessing: resize
+            scale = min(
+                self.img_size[0] / float(img_h), self.img_size[1] / float(img_w)
+            )
+            bboxes /= scale
+
+            bboxes[:, 3] = (bboxes[:, 3] - bboxes[:, 1]) / self.img_size[0]
+            bboxes[:, 2] = (bboxes[:, 2] - bboxes[:, 0]) / self.img_size[1]
+            bboxes[:, 1] = bboxes[:, 1] / self.img_size[0] + bboxes[:, 3] / 2
+            bboxes[:, 1] = bboxes[:, 0] / self.img_size[1] + bboxes[:, 2] / 2
+
+            predn[:, 2:] = bboxes
+            predn[:, 0] = cls
+            predn[:, 1] = scores
+
+            data_list.append(predn)
+        return data_list
 
     def convert_to_coco_format(self, outputs, info_imgs, ids, onnx_nms_file):
         data_list = []
@@ -216,6 +273,8 @@ class COCOEvaluator:
         # Evaluate the Dt (detection) json comparing with the ground truth
         if len(data_dict) > 0:
             cocoGt = self.dataloader.dataset.coco
+
+            json.dump(data_dict, open("./yolox_testdev_2017.json", "w"))
             # TODO: since pycocotools can't process dict in py36, write data to json file.
             if self.testdev:
                 json.dump(data_dict, open("./yolox_testdev_2017.json", "w"))

@@ -76,6 +76,13 @@ def make_parser():
         help="Using TensorRT model for testing.",
     )
     parser.add_argument(
+        "--save-yolo-text",
+        dest="save_yolo_text",
+        default=False,
+        action="store_true",
+        help="convert predictions results to yolo format.",
+    )
+    parser.add_argument(
         "--onnx",
         dest="onnx",
         default=False,
@@ -149,7 +156,7 @@ def main(exp, args, num_gpu):
     logger.info("Model Summary: {}".format(get_model_info(model, exp.test_size)))
     # logger.info("Model Structure:\n{}".format(str(model)))
 
-    evaluator = exp.get_evaluator(args.batch_size, is_distributed, args.test)
+    evaluator = exp.get_evaluator(args.batch_size, is_distributed, args.test, args.save_yolo_text)
 
     torch.cuda.set_device(rank)
     model.cuda(rank)
@@ -200,7 +207,7 @@ def main(exp, args, num_gpu):
         assert (
             not args.fuse and not is_distributed and args.batch_size == 1
         ), "ONNX model with postprocess is not support model fusing and distributed inferencing!"
-        onnx_nms_file = os.path.join(file_name, "yolox_s_ti_lite.onnx")
+        onnx_nms_file = os.path.join(file_name, f"{file_name.split('/')[-1]}.onnx")
         assert os.path.exists(
             onnx_nms_file
         ), "ONNX model with postprocess is not found!\n Run tools/trt.py first!"
