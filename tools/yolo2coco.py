@@ -279,7 +279,7 @@ def generate_coco_format_labels_25d(img_info, class_names, save_path):
 def main(args):
     data_path = args.data_path
     label_type = args.label_type
-    TASKS = ["train", "val"]
+    TASKS = args.task
     for TASK in TASKS:
         imgs_dir = os.path.join(data_path, f"images/{TASK}")
         img_files = sorted(os.listdir(imgs_dir))
@@ -290,7 +290,7 @@ def main(args):
         label_paths = [os.path.join(labels_dir, file) for file in label_files]
 
         nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number corrupt, messages
-        NUM_THREADS = min(48, os.cpu_count())
+        NUM_THREADS = min(16, os.cpu_count())
         print(f"Processing labels with {NUM_THREADS} process(es): ")
 
         img_info = {}
@@ -391,8 +391,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Generating Datasets")
-    # parser.add_argument("--data-path", type=str, default="datasets/Rope3D", help="")
-    parser.add_argument("--data-path", type=str, default="datasets/Rope2D291", help="")
+    parser.add_argument("--data-path", type=str, default="datasets/Rope3D", help="")
+    # parser.add_argument("--data-path", type=str, default="datasets/Rope2D", help="")
     parser.add_argument("--label-type", type=str, default="2D", help="")
+    parser.add_argument("--task", type=str, default=["val"], help="")
     args = parser.parse_args()
     main(args)
