@@ -372,7 +372,7 @@ def main(args):
         if not is_pred:
             labels_dir = os.path.join(data_path, f"labels_yolo_MONO_{label_type}/{TASK}")
         else:
-            labels_dir = os.path.join(data_path, f"preds_yolo_MONO_{label_type}/{TASK}")
+            labels_dir = os.path.join(data_path, f"preds_yolo_MONO_{label_type}_int8")
         label_files = sorted(os.listdir(labels_dir))
         label_paths = [os.path.join(labels_dir, file) for file in label_files]
 
@@ -491,8 +491,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Generating Datasets")
-    # parser.add_argument("--data-path", type=str, default="datasets/Rope3D", help="")
-    parser.add_argument("--data-path", type=str, default="datasets/Rope2D291", help="")
+    parser.add_argument("--data-path", type=str, default="datasets/Rope3D", help="")
+    # parser.add_argument("--data-path", type=str, default="datasets/Rope2D291", help="")
     parser.add_argument("--label-type", type=str, default="2D", help="")
     parser.add_argument("--task", type=str, default=["val"], help="")
     parser.add_argument("--pred", default=False, action="store_true", help="")

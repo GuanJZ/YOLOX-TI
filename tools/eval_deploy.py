@@ -7,11 +7,11 @@ from pycocotools.cocoeval import COCOeval
 CLASS_NAMES = ['pedestrian', 'cyclist', 'car', 'big_vehicle']
 
 # 加载ground truth和预测结果
-gt_file = 'datasets/Rope2D291/annotations_2D/instances_val.json'
-# gt_file = 'datasets/Rope3D/annotations_2D/instances_val.json'
-pred_file = 'datasets/Rope2D291/predictions_2D/instances_val.json'
+# gt_file = 'datasets/Rope2D291/annotations_2D/instances_val.json'
+gt_file = 'datasets/Rope3D/annotations_2D/instances_val.json'
+pred_file = 'datasets/Rope3D/predictions_2D/instances_val.json'
 # pred_file = 'YOLOX_outputs/yolox_s_ti_lite_rope2d/predictions.json'
-images_dir = "datasets/Rope2D291/images/val"
+images_dir = "datasets/Rope3D/images/val"
 # pred_file="/media/junzhi/8e78e258-6a68-4733-8ec2-b837743b11e6/workspace/github/YOLOv6-MONO2.5D/runs/val/exp26/predictions.json"
 
 coco_gt = COCO(gt_file)
