@@ -8,6 +8,7 @@ import itertools
 import json
 import tempfile
 import time
+import os
 from loguru import logger
 from tqdm import tqdm
 import numpy as np
@@ -61,6 +62,7 @@ class COCOEvaluator:
         onnx_nms_file=None,
         decoder=None,
         test_size=None,
+        model_file_dir=None,
     ):
         """
         COCO average precision (AP) Evaluation. Iterate inference on the test dataset
@@ -147,8 +149,7 @@ class COCOEvaluator:
                 yolo_list.extend(self.convert_to_yolo_format(outputs, info_imgs, ids, files_name, onnx_nms_file))
                 pred_files_name.extend(files_name)
         if self.save_yolo_text:
-            import os
-            files_save_dir = os.path.join(self.data_dir, "preds_yolo_MONO_2D")
+            files_save_dir = os.path.join(model_file_dir, "preds_yolo_MONO_2D")
             if not os.path.exists(files_save_dir):
                 os.makedirs(files_save_dir)
             for yolo_res, file_name in zip(yolo_list, pred_files_name):
@@ -161,7 +162,7 @@ class COCOEvaluator:
             data_list = list(itertools.chain(*data_list))
             torch.distributed.reduce(statistics, dst=0)
 
-        eval_results = self.evaluate_prediction(data_list, statistics)
+        eval_results = self.evaluate_prediction(data_list, statistics, model_file_dir)
         synchronize()
         return eval_results
 
@@ -243,7 +244,7 @@ class COCOEvaluator:
                 data_list.append(pred_data)
         return data_list
 
-    def evaluate_prediction(self, data_dict, statistics):
+    def evaluate_prediction(self, data_dict, statistics, model_file_dir):
         if not is_main_process():
             return 0, 0, None
 
@@ -272,9 +273,9 @@ class COCOEvaluator:
 
         # Evaluate the Dt (detection) json comparing with the ground truth
         if len(data_dict) > 0:
+            if self.save_yolo_text:
+                json.dump(data_dict, open(os.path.join(model_file_dir, "./predictions.json"), "w"))
             cocoGt = self.dataloader.dataset.coco
-
-            json.dump(data_dict, open("./yolox_testdev_2017.json", "w"))
             # TODO: since pycocotools can't process dict in py36, write data to json file.
             if self.testdev:
                 json.dump(data_dict, open("./yolox_testdev_2017.json", "w"))

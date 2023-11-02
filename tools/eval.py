@@ -222,7 +222,7 @@ def main(exp, args, num_gpu):
 
     # start evaluate
     *_, summary = evaluator.evaluate(
-        model, is_distributed, args.fp16, trt_file, onnx_file, onnx_nms_file, decoder, exp.test_size
+        model, is_distributed, args.fp16, trt_file, onnx_file, onnx_nms_file, decoder, exp.test_size, file_name
     )
     logger.info("\n" + summary)
 
