@@ -146,7 +146,10 @@ class RopeEvaluator:
             data_list.extend(self.convert_to_coco_format(outputs, info_imgs, ids, onnx_nms_file))
 
             import copy
-            eval_outputs = copy.deepcopy([x.detach().cpu() for x in outputs])
+            if onnx_nms_file is None:
+                eval_outputs = copy.deepcopy([x.detach().cpu() for x in outputs])
+            else:
+                eval_outputs = copy.deepcopy([outputs.detach().cpu()])
 
             for si, pred in enumerate(eval_outputs):
                 labels = targets[si]
@@ -159,10 +162,13 @@ class RopeEvaluator:
                     continue
 
                 # Predictions
-                predn = torch.zeros((pred.shape[0], pred.shape[1]-1))
-                predn[:, :4] = pred[:, :4]
-                predn[:, 4] = pred[:, 4] * pred[:, 5]
-                predn[:, 5:] = pred[:, 6:]
+                if onnx_nms_file is None:
+                    predn = torch.zeros((pred.shape[0], pred.shape[1]-1))
+                    predn[:, :4] = pred[:, :4]
+                    predn[:, 4] = pred[:, 4] * pred[:, 5]
+                    predn[:, 5:] = pred[:, 6:]
+                else:
+                    predn = pred.clone()
 
                 img_h, img_w = info_imgs[0][si], info_imgs[1][si]
                 scale = min(

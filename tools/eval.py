@@ -189,10 +189,10 @@ def main(exp, args, num_gpu):
         assert (
             not args.fuse and not is_distributed and args.batch_size == 1
         ), "ONNX model is not support model fusing and distributed inferencing!"
-        onnx_file = os.path.join(file_name, "yolox_s_ti_lite_nonms.onnx")
+        onnx_file = os.path.join(file_name, f"{args.experiment_name}.onnx")
         assert os.path.exists(
             onnx_file
-        ), "ONNX model is not found!\n Run tools/trt.py first!"
+        ), "ONNX model is not found!\n"
         trt_file = None
         onnx_nms_file = None
         decoder = None
@@ -200,10 +200,10 @@ def main(exp, args, num_gpu):
         assert (
             not args.fuse and not is_distributed and args.batch_size == 1
         ), "ONNX model with postprocess is not support model fusing and distributed inferencing!"
-        onnx_nms_file = os.path.join(file_name, "yolox_s_ti_lite.onnx")
+        onnx_nms_file = os.path.join(file_name, f"{args.experiment_name}.onnx")
         assert os.path.exists(
             onnx_nms_file
-        ), "ONNX model with postprocess is not found!\n Run tools/trt.py first!"
+        ), "ONNX model with postprocess is not found!\n"
         trt_file = None
         onnx_file = None
         decoder = None
