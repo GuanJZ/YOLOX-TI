@@ -467,7 +467,7 @@ def main(args):
         if not is_pred:
             save_dir = os.path.join(data_path, f"annotations_{label_type}")
         else:
-            save_dir = os.path.join(data_path, f"predictions_{label_type}")
+            save_dir = os.path.join(data_path, f"predictions_{label_type}_int8")
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
         save_path = os.path.join(

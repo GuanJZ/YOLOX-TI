@@ -118,9 +118,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # parser.add_argument('--rope3d_path', default='datasets/Rope2D291/labels_raw')
-    parser.add_argument('--rope3d_path',default='data/Rope3D/labels_raw')
+    parser.add_argument('--rope3d_path',default='datasets/Rope3D/labels_raw')
     parser.add_argument('--convert_type', default="MONO_2D")
-    parser.add_argument('--task', default=["train", "val"])
+    parser.add_argument('--task', default=["val"])
     args = parser.parse_args()
     print(args)
 

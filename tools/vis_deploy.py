@@ -13,9 +13,9 @@ color_list = {'pedestrian': [0.000, 0.447, 0.741],
               }
 
 
-img_dir = "datasets/Rope2D291/images/val"
-pred_dir = "datasets/Rope2D291/preds_yolo_MONO_2D_int8/val"
-vis_save_dir = "datasets/Rope2D291/vis_ti_quant_preds"
+img_dir = "datasets/Rope3D/images/val"
+pred_dir = "datasets/Rope3D/preds_yolo_MONO_2D_int8"
+vis_save_dir = os.path.join("datasets/Rope3D", "vis_ti_quant_preds_2D")
 if not os.path.exists(vis_save_dir):
     os.makedirs(vis_save_dir)
 
