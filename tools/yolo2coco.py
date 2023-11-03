@@ -101,6 +101,46 @@ def check_label_2d_files(args):
         msg = f"WARNING: {lb_path}: ignoring invalid labels: {e}"
         return img_path, None, nc, nm, nf, ne, msg
 
+def check_pred_2d_files(args):
+    img_path, lb_path = args
+    nm, nf, ne, nc, msg = 0, 0, 0, 0, ""  # number (missing, found, empty, message
+    try:
+        if os.path.exists(lb_path):
+            nf = 1  # label found
+            with open(lb_path, "r") as f:
+                labels = [
+                    x.split() for x in f.read().strip().splitlines() if len(x)
+                ]
+                labels = np.array(labels, dtype=np.float32)
+            if len(labels):
+                assert all(
+                    len(l) == 6 for l in labels
+                ), f"{lb_path}: wrong label format."
+                assert (
+                    labels >= 0
+                ).all(), f"{lb_path}: Label values error: all values in label file must > 0"
+                assert (
+                    labels[:, 1:] <= 1
+                ).all(), f"{lb_path}: Label values error: all coordinates must be normalized"
+
+                _, indices = np.unique(labels, axis=0, return_index=True)
+                if len(indices) < len(labels):  # duplicate row check
+                    labels = labels[indices]  # remove duplicates
+                    msg += f"WARNING: {lb_path}: {len(labels) - len(indices)} duplicate labels removed"
+                labels = labels.tolist()
+            else:
+                ne = 1  # label empty
+                labels = []
+        else:
+            nm = 1  # label missing
+            labels = []
+
+        return img_path, labels, nc, nm, nf, ne, msg
+    except Exception as e:
+        nc = 1
+        msg = f"WARNING: {lb_path}: ignoring invalid labels: {e}"
+        return img_path, None, nc, nm, nf, ne, msg
+
 def check_label_25d_files(args):
     img_path, lb_path = args
     nm, nf, ne, nc, msg = 0, 0, 0, 0, ""  # number (missing, found, empty, message
@@ -205,6 +245,49 @@ def generate_coco_format_labels_2d(img_info, class_names, save_path):
             f"Convert to COCO format finished. Resutls saved in {save_path}"
         )
 
+def generate_coco_format_preds_2d(img_info, class_names, save_path):
+    # for evaluation with pycocotools
+    dataset = []
+
+    ann_id = 0
+    print(f"Convert to COCO format")
+    for i, (img_path, info) in enumerate(tqdm(img_info.items())):
+        labels = info["labels"] if info["labels"] else []
+        img_id = os.path.splitext(os.path.basename(img_path))[0]
+        img_w, img_h = info["shape"]
+        if labels:
+            for label in labels:
+                c, s, x, y, w, h = label
+                # convert x,y,w,h to x1,y1,x2,y2
+                x1 = (x - w / 2) * img_w
+                y1 = (y - h / 2) * img_h
+                x2 = (x + w / 2) * img_w
+                y2 = (y + h / 2) * img_h
+                # cls_id starts from 0
+                cls_id = int(c)
+                w = max(0, x2 - x1)
+                h = max(0, y2 - y1)
+                dataset.append(
+                    {
+                        "area": h * w,
+                        "score": s,
+                        "bbox": [x1, y1, w, h],
+                        "category_id": cls_id,
+                        "id": ann_id,
+                        "image_id": i,
+                        "iscrowd": 0,
+                        # mask
+                        "segmentation": [],
+                    }
+                )
+                ann_id += 1
+
+    with open(save_path, "w") as f:
+        json.dump(dataset, f)
+        print(
+            f"Convert to COCO format finished. Resutls saved in {save_path}"
+        )
+
 def generate_coco_format_labels_25d(img_info, class_names, save_path):
     # for evaluation with pycocotools
     dataset = {"categories": [], "annotations": [], "images": []}
@@ -279,18 +362,25 @@ def generate_coco_format_labels_25d(img_info, class_names, save_path):
 def main(args):
     data_path = args.data_path
     label_type = args.label_type
-    TASKS = ["train", "val"]
+    TASKS = args.task
+    is_pred = args.pred
+    precision = args.precision
     for TASK in TASKS:
         imgs_dir = os.path.join(data_path, f"images/{TASK}")
         img_files = sorted(os.listdir(imgs_dir))
         img_paths = [os.path.join(imgs_dir, file) for file in img_files]
 
-        labels_dir = os.path.join(data_path, f"labels_yolo_MONO_{label_type}/{TASK}")
-        label_files = sorted(os.listdir(labels_dir))
-        label_paths = [os.path.join(labels_dir, file) for file in label_files]
+        if not is_pred:
+            labels_dir = os.path.join(data_path, f"labels_yolo_MONO_{label_type}/{TASK}")
+            label_files = sorted(os.listdir(labels_dir))
+            label_paths = [os.path.join(labels_dir, file) for file in label_files]
+        else:
+            labels_dir = os.path.join(data_path, f"preds_yolo_MONO_2.5D_{precision}/{TASK}")
+            label_files = sorted(os.listdir(labels_dir))
+            label_paths = [os.path.join(labels_dir, file) for file in label_files]
 
         nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number corrupt, messages
-        NUM_THREADS = min(48, os.cpu_count())
+        NUM_THREADS = min(16, os.cpu_count())
         print(f"Processing labels with {NUM_THREADS} process(es): ")
 
         img_info = {}
@@ -312,35 +402,78 @@ def main(args):
         if msgs:
             print("\n".join(msgs))
 
+        if len(img_paths) != len(label_paths):
+            if len(img_paths) > len(label_paths):
+
+                imgs_name = [os.path.basename(img_p).split(".")[0] for img_p in img_paths]
+                labels_name = [os.path.basename(label_p).split(".")[0] for label_p in label_paths]
+                for imgs_n in imgs_name:
+                    if imgs_n not in labels_name:
+                        idx = imgs_name.index(imgs_n)
+                        label_p = os.path.join(labels_dir, f"{imgs_n}.txt")
+                        label_paths.insert(idx, label_p)
+                        with open(label_p, 'w') as file:
+                            pass
+
         if label_type == "2D":
-            with Pool(NUM_THREADS) as pool:
-                pbar = pool.imap(
-                    check_label_2d_files, zip(img_paths, label_paths)
-                )
-                pbar = tqdm(pbar, total=len(label_paths))
-                for (
-                        img_path,
-                        labels_per_file,
-                        nc_per_file,
-                        nm_per_file,
-                        nf_per_file,
-                        ne_per_file,
-                        msg,
-                ) in pbar:
-                    if nc_per_file == 0:
-                        img_info[img_path]["labels"] = labels_per_file
-                    else:
-                        img_info.pop(img_path)
-                    nc += nc_per_file
-                    nm += nm_per_file
-                    nf += nf_per_file
-                    ne += ne_per_file
-                    if msg:
-                        msgs.append(msg)
-                    pbar.desc = f"{nf} label(s) found, {nm} label(s) missing, {ne} label(s) empty, {nc} invalid label files"
-            pbar.close()
-            if msgs:
-                print("\n".join(msgs))
+            if not is_pred:
+                with Pool(NUM_THREADS) as pool:
+                    pbar = pool.imap(
+                        check_label_2d_files, zip(img_paths, label_paths)
+                    )
+                    pbar = tqdm(pbar, total=len(label_paths))
+                    for (
+                            img_path,
+                            labels_per_file,
+                            nc_per_file,
+                            nm_per_file,
+                            nf_per_file,
+                            ne_per_file,
+                            msg,
+                    ) in pbar:
+                        if nc_per_file == 0:
+                            img_info[img_path]["labels"] = labels_per_file
+                        else:
+                            img_info.pop(img_path)
+                        nc += nc_per_file
+                        nm += nm_per_file
+                        nf += nf_per_file
+                        ne += ne_per_file
+                        if msg:
+                            msgs.append(msg)
+                        pbar.desc = f"{nf} label(s) found, {nm} label(s) missing, {ne} label(s) empty, {nc} invalid label files"
+                pbar.close()
+                if msgs:
+                    print("\n".join(msgs))
+            else:
+                with Pool(NUM_THREADS) as pool:
+                    pbar = pool.imap(
+                        check_pred_2d_files, zip(img_paths, label_paths)
+                    )
+                    pbar = tqdm(pbar, total=len(label_paths))
+                    for (
+                            img_path,
+                            labels_per_file,
+                            nc_per_file,
+                            nm_per_file,
+                            nf_per_file,
+                            ne_per_file,
+                            msg,
+                    ) in pbar:
+                        if nc_per_file == 0:
+                            img_info[img_path]["labels"] = labels_per_file
+                        else:
+                            img_info.pop(img_path)
+                        nc += nc_per_file
+                        nm += nm_per_file
+                        nf += nf_per_file
+                        ne += ne_per_file
+                        if msg:
+                            msgs.append(msg)
+                        pbar.desc = f"{nf} label(s) found, {nm} label(s) missing, {ne} label(s) empty, {nc} invalid label files"
+                pbar.close()
+                if msgs:
+                    print("\n".join(msgs))
 
         elif label_type == "2.5D":
             with Pool(NUM_THREADS) as pool:
@@ -372,17 +505,31 @@ def main(args):
             if msgs:
                 print("\n".join(msgs))
 
-        save_dir = os.path.join(data_path, f"annotations_{label_type}")
-        if not os.path.exists(save_dir):
-            os.mkdir(save_dir)
-        save_path = os.path.join(
-            save_dir, "instances_" + f"{TASK}" + ".json"
-        )
+        if not is_pred:
+            save_dir = os.path.join(data_path, f"annotations_{label_type}")
+            if not os.path.exists(save_dir):
+                os.mkdir(save_dir)
+            save_path = os.path.join(
+                save_dir, "instances_" + f"{TASK}" + ".json"
+            )
+        else:
+            # save_dir = os.path.join(data_path, f"predictions_{label_type}_{precision}")
+            save_dir = os.path.join(data_path, f"predictions_2.5D_{precision}")
+            if not os.path.exists(save_dir):
+                os.mkdir(save_dir)
+            save_path = os.path.join(
+                save_dir, "instances_" + f"{TASK}" + ".json"
+            )
 
         if label_type == "2D":
-            generate_coco_format_labels_2d(
-                img_info, class_names, save_path
-            )
+            if not is_pred:
+                generate_coco_format_labels_2d(
+                    img_info, class_names, save_path
+                )
+            else:
+                generate_coco_format_preds_2d(
+                    img_info, class_names, save_path
+                )
         elif label_type == "2.5D":
             generate_coco_format_labels_25d(
                 img_info, class_names, save_path
@@ -393,6 +540,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Generating Datasets")
     parser.add_argument("--data-path", type=str, default="datasets/Rope3D", help="")
     # parser.add_argument("--data-path", type=str, default="datasets/Rope2D291", help="")
-    parser.add_argument("--label-type", type=str, default="2.5D", help="")
+    parser.add_argument('--task', default=["val"])
+    parser.add_argument("--label-type", type=str, default="2D", help="")
+    parser.add_argument('--pred', default=False, action='store_true')
+    parser.add_argument('--precision', default="int8", help="int8 or fp32")
     args = parser.parse_args()
     main(args)

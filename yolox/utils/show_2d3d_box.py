@@ -251,13 +251,15 @@ def show(args):
     result = detect_data(pred, class_names)
     target = detect_data(label, class_names)
 
-    name = os.path.basename(img_path)
+    dirname = os.path.dirname(os.path.dirname(img_path))
+    basename = os.path.basename(img_path)
 
-    path_tmp = img_path.split("/")
-    calib_file = os.path.join(path_tmp[0], path_tmp[1], "calibs", path_tmp[2], path_tmp[3].replace("jpg", "txt"))
+    calib_name = basename.replace("jpg", "txt")
+    calib_file = os.path.join(dirname, "calibs/val", calib_name)
     p2 = read_kitti_cal(calib_file)
 
-    extrinsic_file = os.path.join(path_tmp[0], path_tmp[1], "extrinsics", path_tmp[2], path_tmp[3].replace("jpg", "yaml"))
+    ext_name = basename.replace("jpg", "yaml")
+    extrinsic_file = os.path.join(dirname, "extrinsics/val", ext_name)
     world2camera = read_kitti_ext(extrinsic_file).reshape((4, 4))
     camera2world = np.linalg.inv(world2camera).reshape(4, 4)
 
@@ -275,8 +277,8 @@ def show(args):
         color_type = color_list[t.obj_type]
         color = (color_type[0] * 255, color_type[1] * 255, color_type[2] * 255)
         if show_pred_2d:
-            # cv2.rectangle(img, (t.x1, t.y1), (t.x2, t.y2),
-            #               color, 2)
+            cv2.rectangle(img, (t.x1, t.y1), (t.x2, t.y2),
+                          color, 2)
             # 标签的颜色
             txt_color = (0, 0, 0) if (sum(color_type) / len(color_type)) > 0.5 else (255, 255, 255)
             txt_bk_color = (color_type[0] * 255 * 0.7, color_type[1] * 255 * 0.7, color_type[2] * 255 * 0.7)
@@ -287,6 +289,9 @@ def show(args):
                         0.4, txt_color, thickness=1)
 
         if t.w <= 0.05 and t.l <= 0.05 and t.h <= 0.05:  # invalid annotation
+            continue
+
+        if t.X <= 0.05 and t.Y <= 0.05 and t.Z <= 0.05:  # invalid annotation
             continue
 
         cam_bottom_center = [t.X, t.Y, t.Z]  # bottom center in Camera coordinate
@@ -353,7 +358,7 @@ def show(args):
         cv2.line(img, tuple(verts3d[1]), tuple(verts3d[4]), (255, 255, 255), 1)
         # cv2.circle(img, tuple((t.keypoint_x, t.keypoint_y)), radius=5, color=(255, 255, 255), thickness=-1)
 
-    return name, img
+    return basename, img
 
 
 def show_2d3d_box(preds, labels, img_paths, class_names, save_dir, is_show_pred_2d):
@@ -371,11 +376,11 @@ def show_2d3d_box(preds, labels, img_paths, class_names, save_dir, is_show_pred_
     global show_pred_2d
     show_pred_2d = is_show_pred_2d
 
-    NUM_THREADS = min(48, os.cpu_count())
+    NUM_THREADS = min(16, os.cpu_count())
     class_names = [class_names] * len(preds)
     with Pool(NUM_THREADS) as pool:
         pbar = pool.imap(show, zip(preds, labels, img_paths, class_names))
         pbar = tqdm(pbar, total=len(labels))
         for name, img in pbar:
-            cv2.imwrite('%s/%s.jpg' % (out_dir, name), img)
+            cv2.imwrite('%s/%s' % (out_dir, name), img)
     pbar.close()
