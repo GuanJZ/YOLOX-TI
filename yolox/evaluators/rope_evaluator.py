@@ -19,6 +19,7 @@ from yolox.utils import (
     gather,
     is_main_process,
     postprocess,
+    postprocess_export,
     synchronize,
     time_synchronized,
     xyxy2xywh,
@@ -244,14 +245,14 @@ class RopeEvaluator:
 
                     labels_3d.append(labelsn_3d)
                     img_paths.append(paths[si])
-
-        logger.info("Save preditions 2.5D ...")
-        pred_3d_save_dir = os.path.join("/".join(img_paths[0].split("/")[:2]), "preds_kitti_MONO_2.5D_fp32", "val")
-        if not os.path.exists(pred_3d_save_dir):
-            os.makedirs(pred_3d_save_dir)
-        for pred_3d, img_path in tqdm(zip(preds_3d, img_paths)):
-            pred_3d_save_path = os.path.join(pred_3d_save_dir, os.path.basename(img_path).replace("jpg", "txt"))
-            np.savetxt(pred_3d_save_path, pred_3d, delimiter=" ")
+        if False:
+            logger.info("Save preditions 2.5D ...")
+            pred_3d_save_dir = os.path.join("/".join(img_paths[0].split("/")[:2]), "preds_kitti_MONO_2.5D_fp32", "val")
+            if not os.path.exists(pred_3d_save_dir):
+                os.makedirs(pred_3d_save_dir)
+            for pred_3d, img_path in tqdm(zip(preds_3d, img_paths)):
+                pred_3d_save_path = os.path.join(pred_3d_save_dir, os.path.basename(img_path).replace("jpg", "txt"))
+                np.savetxt(pred_3d_save_path, pred_3d, delimiter=" ")
 
         statistics = torch.cuda.FloatTensor([inference_time, nms_time, n_samples])
 
@@ -266,15 +267,16 @@ class RopeEvaluator:
             *_, summary = eval_results
             logger.info("\n" + summary)
 
-            # show 3d bboxes
-            from yolox.utils.show_2d3d_box import show_2d3d_box
-            # conf_thres = AP50_F1_max_idx / 1000.0
-            conf_thres = 0.5
-            final_preds_3d = [pred[pred[:, 15] >= conf_thres] for pred in preds_3d]
+            if False:
+                # show 3d bboxes
+                from yolox.utils.show_2d3d_box import show_2d3d_box
+                # conf_thres = AP50_F1_max_idx / 1000.0
+                conf_thres = 0.5
+                final_preds_3d = [pred[pred[:, 15] >= conf_thres] for pred in preds_3d]
 
-            logger.info("writing 3D BBoxes")
-            show_2d3d_box(final_preds_3d, labels_3d, img_paths, ['pedestrian', 'cyclist', 'car', 'big_vehicle'], file_name,
-                          True)
+                logger.info("writing 3D BBoxes")
+                show_2d3d_box(final_preds_3d, labels_3d, img_paths, ['pedestrian', 'cyclist', 'car', 'big_vehicle'], file_name,
+                              True)
         else:
             return eval_results
 

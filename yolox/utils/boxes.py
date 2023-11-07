@@ -11,6 +11,7 @@ import torch.nn as nn
 __all__ = [
     "filter_box",
     "postprocess",
+    "postprocess_export",
     "bboxes_iou",
     "matrix_iou",
     "adjust_box_anns",
@@ -33,12 +34,9 @@ def filter_box(output, scale_range):
 
 
 def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
-    box_corner = prediction.new(prediction.shape)
-    box_corner[:, :, 0] = prediction[:, :, 0] - prediction[:, :, 2] / 2
-    box_corner[:, :, 1] = prediction[:, :, 1] - prediction[:, :, 3] / 2
-    box_corner[:, :, 2] = prediction[:, :, 0] + prediction[:, :, 2] / 2
-    box_corner[:, :, 3] = prediction[:, :, 1] + prediction[:, :, 3] / 2
-    prediction[:, :, :4] = box_corner[:, :, :4]
+    cx, cy, w, h = prediction[..., 0:1], prediction[..., 1:2], prediction[..., 2:3], prediction[..., 3:4]
+    box = cxcywh2xyxy_export(cx, cy, w, h)
+    prediction[:, :, :4] = box
 
     output = [None for _ in range(len(prediction))]
     for i, image_pred in enumerate(prediction):
@@ -94,7 +92,7 @@ def postprocess_export(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
         detections = detections[conf_mask]
         if not detections.size(0):
             continue
-        class_2d_offset = detections[:, -1:] * 4096  # class_2d_offser
+        class_2d_offset = detections[:, 5:6] * 4096  # class_2d_offser
 
         nms_out_index = torchvision.ops.nms(
             detections[:, :4] + class_2d_offset,
